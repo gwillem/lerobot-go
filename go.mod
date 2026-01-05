@@ -1,4 +1,4 @@
-module lerobot
+module github.com/gwillem/lerobot
 
 go 1.25.5
 
