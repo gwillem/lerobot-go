@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"lerobot/pkg/robot"
+	"github.com/gwillem/lerobot/pkg/robot"
 )
 
 // State represents the current state of teleoperation.
@@ -22,6 +22,7 @@ type Controller struct {
 	leader   *robot.Arm
 	follower *robot.Arm
 	hz       int
+	mirror   bool
 
 	mu       sync.RWMutex
 	state    State
@@ -33,11 +34,12 @@ type Controller struct {
 
 // Config holds configuration for the controller.
 type Config struct {
-	LeaderPort      string
-	LeaderCalib     string
-	FollowerPort    string
-	FollowerCalib   string
-	Hz              int
+	LeaderPort    string
+	LeaderCalib   string
+	FollowerPort  string
+	FollowerCalib string
+	Hz            int
+	Mirror        bool // Invert positions for shoulder_pan (servo 1) and wrist_roll (servo 5)
 }
 
 // NewController creates a new teleoperation controller.
@@ -67,6 +69,7 @@ func NewController(cfg Config) (*Controller, error) {
 		leader:   leader,
 		follower: follower,
 		hz:       cfg.Hz,
+		mirror:   cfg.Mirror,
 		stateCh:  make(chan State, 1),
 		logCh:    make(chan string, 10),
 	}, nil
@@ -164,8 +167,21 @@ func (c *Controller) step(ctx context.Context) {
 		return
 	}
 
+	// Apply mirroring if enabled (invert shoulder_pan and wrist_roll)
+	followerPositions := positions
+	if c.mirror {
+		followerPositions = make(map[robot.MotorName]float64, len(positions))
+		for name, pos := range positions {
+			if name == robot.ShoulderPan || name == robot.WristRoll {
+				followerPositions[name] = -pos
+			} else {
+				followerPositions[name] = pos
+			}
+		}
+	}
+
 	// Write to follower
-	if err := c.follower.WritePositions(ctx, positions); err != nil {
+	if err := c.follower.WritePositions(ctx, followerPositions); err != nil {
 		c.log("Write error: %v", err)
 	}
 

@@ -15,8 +15,8 @@ import (
 	"github.com/NimbleMarkets/ntcharts/canvas/runes"
 	"github.com/NimbleMarkets/ntcharts/linechart/streamlinechart"
 
-	"lerobot/pkg/robot"
-	"lerobot/pkg/teleop"
+	"github.com/gwillem/lerobot/pkg/robot"
+	"github.com/gwillem/lerobot/pkg/teleop"
 )
 
 // Config matches the format written by robot-info
@@ -69,12 +69,13 @@ var (
 )
 
 type model struct {
-	ctrl     *teleop.Controller
-	chart    *streamlinechart.Model
-	width    int      // terminal width
-	height   int      // terminal height
-	logs     []string // last N log messages
-	quitting bool
+	ctrl          *teleop.Controller
+	chart         *streamlinechart.Model
+	width         int                          // terminal width
+	height        int                          // terminal height
+	logs          []string                     // last N log messages
+	quitting      bool
+	lastPositions map[robot.MotorName]float64 // track previous positions to detect movement
 }
 
 func (m *model) addLog(msg string) {
@@ -82,6 +83,19 @@ func (m *model) addLog(msg string) {
 	if len(m.logs) > maxLogs {
 		m.logs = m.logs[len(m.logs)-maxLogs:]
 	}
+}
+
+// hasMovement checks if any motor position has changed from the last state
+func (m *model) hasMovement(positions map[robot.MotorName]float64) bool {
+	if m.lastPositions == nil {
+		return true // first reading, consider it movement
+	}
+	for name, pos := range positions {
+		if lastPos, ok := m.lastPositions[name]; !ok || pos != lastPos {
+			return true
+		}
+	}
+	return false
 }
 
 // Messages from the controller
@@ -165,11 +179,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateMsg:
 		state := teleop.State(msg)
 		if state.Positions != nil {
-			// Push all motor positions to the chart
-			for name, pos := range state.Positions {
-				m.chart.PushDataSet(string(name), pos)
+			// Only update chart if there's movement (freeze when idle)
+			if m.hasMovement(state.Positions) {
+				for name, pos := range state.Positions {
+					m.chart.PushDataSet(string(name), pos)
+				}
+				m.chart.DrawAll()
+				m.lastPositions = state.Positions
 			}
-			m.chart.DrawAll()
 		}
 		return m, waitForState(m.ctrl)
 
@@ -242,6 +259,7 @@ func main() {
 		teleopPort = flag.String("teleop.port", "", "Teleop serial port (optional if lerobot.json exists)")
 		teleopID   = flag.String("teleop.id", "leader", "Teleop ID")
 		hz         = flag.Int("hz", 60, "Control loop frequency")
+		mirror     = flag.Bool("mirror", false, "Mirror mode: invert shoulder_pan and wrist_roll positions")
 	)
 	flag.String("robot.type", "so101_follower", "Robot type")
 	flag.String("teleop.type", "so101_leader", "Teleop type")
@@ -280,6 +298,7 @@ func main() {
 		FollowerPort:  followerPort,
 		FollowerCalib: followerCalib,
 		Hz:            *hz,
+		Mirror:        *mirror,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create controller: %v", err)
