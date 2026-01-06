@@ -34,28 +34,22 @@ type Controller struct {
 
 // Config holds configuration for the controller.
 type Config struct {
-	LeaderPort    string
-	LeaderCalib   string
-	FollowerPort  string
-	FollowerCalib string
-	Hz            int
-	Mirror        bool // Invert positions for shoulder_pan (servo 1) and wrist_roll (servo 5)
+	LeaderPort        string
+	LeaderCalibration robot.Calibration
+	FollowerPort      string
+	FollowerCalibration robot.Calibration
+	Hz                int
+	Mirror            bool // Invert positions for shoulder_pan (servo 1) and wrist_roll (servo 5)
 }
 
 // NewController creates a new teleoperation controller.
 func NewController(cfg Config) (*Controller, error) {
-	leader, err := robot.NewArm(robot.ArmConfig{
-		Port:            cfg.LeaderPort,
-		CalibrationPath: cfg.LeaderCalib,
-	})
+	leader, err := robot.NewArm(cfg.LeaderPort, cfg.LeaderCalibration)
 	if err != nil {
 		return nil, fmt.Errorf("create leader arm: %w", err)
 	}
 
-	follower, err := robot.NewArm(robot.ArmConfig{
-		Port:            cfg.FollowerPort,
-		CalibrationPath: cfg.FollowerCalib,
-	})
+	follower, err := robot.NewArm(cfg.FollowerPort, cfg.FollowerCalibration)
 	if err != nil {
 		leader.Close()
 		return nil, fmt.Errorf("create follower arm: %w", err)

@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -19,29 +17,9 @@ import (
 	"github.com/gwillem/lerobot/pkg/teleop"
 )
 
-// Config matches the format written by robot-info
-type Config struct {
-	Leader   PortConfig `json:"leader"`
-	Follower PortConfig `json:"follower"`
-}
-
-type PortConfig struct {
-	Port        string `json:"port"`
-	Calibration string `json:"calibration"`
-}
-
-const configFile = "lerobot.json"
-
-func loadConfig() (*Config, error) {
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, err
-	}
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+type TeleoperateCommand struct {
+	Hz     int  `long:"hz" default:"60" description:"Control loop frequency"`
+	Mirror bool `long:"mirror" description:"Mirror mode: invert shoulder_pan and wrist_roll positions"`
 }
 
 const (
@@ -68,7 +46,7 @@ var (
 	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-type model struct {
+type teleopModel struct {
 	ctrl          *teleop.Controller
 	chart         *streamlinechart.Model
 	width         int                          // terminal width
@@ -78,7 +56,7 @@ type model struct {
 	lastPositions map[robot.MotorName]float64 // track previous positions to detect movement
 }
 
-func (m *model) addLog(msg string) {
+func (m *teleopModel) addLog(msg string) {
 	m.logs = append(m.logs, msg)
 	if len(m.logs) > maxLogs {
 		m.logs = m.logs[len(m.logs)-maxLogs:]
@@ -86,7 +64,7 @@ func (m *model) addLog(msg string) {
 }
 
 // hasMovement checks if any motor position has changed from the last state
-func (m *model) hasMovement(positions map[robot.MotorName]float64) bool {
+func (m *teleopModel) hasMovement(positions map[robot.MotorName]float64) bool {
 	if m.lastPositions == nil {
 		return true // first reading, consider it movement
 	}
@@ -115,7 +93,7 @@ func waitForLog(ctrl *teleop.Controller) tea.Cmd {
 }
 
 // chartSize calculates the size of the chart based on terminal dimensions
-func (m *model) chartSize() (width, height int) {
+func (m *teleopModel) chartSize() (width, height int) {
 	if m.width == 0 || m.height == 0 {
 		return 80, 20 // default size before we know terminal size
 	}
@@ -130,12 +108,12 @@ func (m *model) chartSize() (width, height int) {
 	return width, height
 }
 
-func (m *model) resizeChart() {
+func (m *teleopModel) resizeChart() {
 	w, h := m.chartSize()
 	m.chart.Resize(w, h)
 }
 
-func initialModel(ctrl *teleop.Controller) model {
+func initialTeleopModel(ctrl *teleop.Controller) teleopModel {
 	chart := streamlinechart.New(80, 20,
 		streamlinechart.WithYRange(-100, 100),
 	)
@@ -147,13 +125,13 @@ func initialModel(ctrl *teleop.Controller) model {
 		chart.SetDataSetStyles(string(name), runes.ThinLineStyle, style)
 	}
 
-	return model{
+	return teleopModel{
 		ctrl:  ctrl,
 		chart: &chart,
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m teleopModel) Init() tea.Cmd {
 	// Start listening for state and log updates
 	return tea.Batch(
 		waitForState(m.ctrl),
@@ -161,7 +139,7 @@ func (m model) Init() tea.Cmd {
 	)
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m teleopModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -198,7 +176,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m teleopModel) View() string {
 	if m.quitting {
 		return "Teleoperation stopped.\n"
 	}
@@ -251,54 +229,36 @@ func renderLegend() string {
 	return strings.Join(items, "  ")
 }
 
-func main() {
-	// Parse command-line flags
-	var (
-		robotPort  = flag.String("robot.port", "", "Robot serial port (optional if lerobot.json exists)")
-		robotID    = flag.String("robot.id", "follower", "Robot ID")
-		teleopPort = flag.String("teleop.port", "", "Teleop serial port (optional if lerobot.json exists)")
-		teleopID   = flag.String("teleop.id", "leader", "Teleop ID")
-		hz         = flag.Int("hz", 60, "Control loop frequency")
-		mirror     = flag.Bool("mirror", false, "Mirror mode: invert shoulder_pan and wrist_roll positions")
-	)
-	flag.String("robot.type", "so101_follower", "Robot type")
-	flag.String("teleop.type", "so101_leader", "Teleop type")
-	flag.Parse()
-
-	// Try to load config file if ports not specified
-	leaderPort := *teleopPort
-	leaderCalib := fmt.Sprintf("calibration/%s.json", *teleopID)
-	followerPort := *robotPort
-	followerCalib := fmt.Sprintf("calibration/%s.json", *robotID)
-
-	if leaderPort == "" || followerPort == "" {
-		cfg, err := loadConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "No ports specified and cannot load %s: %v\n", configFile, err)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Run 'go run ./cmd/robot-info' to detect and configure ports,")
-			fmt.Fprintln(os.Stderr, "or specify ports manually with --robot.port and --teleop.port")
-			os.Exit(1)
-		}
-		if leaderPort == "" {
-			leaderPort = cfg.Leader.Port
-			leaderCalib = cfg.Leader.Calibration
-		}
-		if followerPort == "" {
-			followerPort = cfg.Follower.Port
-			followerCalib = cfg.Follower.Calibration
-		}
-		fmt.Printf("Loaded configuration from %s\n", configFile)
+func (c *TeleoperateCommand) Execute(args []string) error {
+	// Load config
+	cfg, err := robot.LoadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No configuration found. Run 'lerobot setup' first.")
+		os.Exit(1)
 	}
+
+	// Check ports are configured
+	if cfg.Leader.Port == "" || cfg.Follower.Port == "" {
+		fmt.Fprintln(os.Stderr, "Arms not configured. Run 'lerobot setup' first.")
+		os.Exit(1)
+	}
+
+	// Check calibration
+	if !cfg.Leader.IsCalibrated() || !cfg.Follower.IsCalibrated() {
+		fmt.Fprintln(os.Stderr, "Arms not calibrated. Run 'lerobot setup' first.")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Loaded configuration from %s\n", robot.DefaultConfigFile)
 
 	// Create controller
 	ctrl, err := teleop.NewController(teleop.Config{
-		LeaderPort:    leaderPort,
-		LeaderCalib:   leaderCalib,
-		FollowerPort:  followerPort,
-		FollowerCalib: followerCalib,
-		Hz:            *hz,
-		Mirror:        *mirror,
+		LeaderPort:          cfg.Leader.Port,
+		LeaderCalibration:   cfg.Leader.Calibration,
+		FollowerPort:        cfg.Follower.Port,
+		FollowerCalibration: cfg.Follower.Calibration,
+		Hz:                  c.Hz,
+		Mirror:              c.Mirror,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create controller: %v", err)
@@ -316,8 +276,10 @@ func main() {
 	}()
 
 	// Run TUI
-	p := tea.NewProgram(initialModel(ctrl), tea.WithAltScreen())
+	p := tea.NewProgram(initialTeleopModel(ctrl), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatalf("Error running program: %v", err)
 	}
+
+	return nil
 }

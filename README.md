@@ -1,15 +1,15 @@
 # lerobot-go
 
-A high-performance Go implementation for teleoperating robot arms, compatible with [HuggingFace LeRobot](https://github.com/huggingface/lerobot). Control your SO-101 robot arm with real-time visualization and seamless hardware integration.
+A Go implementation for teleoperating robot arms, compatible with [HuggingFace LeRobot](https://github.com/huggingface/lerobot). Control your SO-101 robot arm with live visualization.
 
 ![lerobot-go teleoperation](https://buq.eu/screenshots/2fc3bd789c7e80936bad65d3.png)
 
 ## Features
 
-- **Real-time Teleoperation** - Control follower arm by moving leader arm at 60Hz
+- **Teleoperation** - Control follower arm by moving leader arm at 60Hz
 - **Live Position Graphs** - Terminal UI with streaming multi-line charts showing all 6 servo positions
-- **Automatic Port Detection** - Scan and identify robot arms with interactive servo wiggle test
-- **LeRobot Calibration Compatible** - Reuse calibration files from HuggingFace LeRobot Python framework
+- **Interactive Setup** - Scan, identify, and calibrate robot arms with guided workflow
+- **Mirroring** - Optional mirror mode if your robot arms are positioned opposite each other
 
 ## Supported Hardware
 
@@ -20,39 +20,38 @@ A high-performance Go implementation for teleoperating robot arms, compatible wi
 ## Installation
 
 ```bash
-go install github.com/yourusername/lerobot-go/cmd/lerobot-teleoperate@latest
-go install github.com/yourusername/lerobot-go/cmd/robot-info@latest
+go install github.com/gwillem/lerobot/cmd/lerobot@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/yourusername/lerobot-go.git
-cd lerobot-go
-go build ./cmd/...
+git clone https://github.com/gwillem/lerobot.git
+cd lerobot
+go build ./cmd/lerobot
 ```
 
 ## Quick Start
 
-### 1. Detect and Configure Robot Arms
+### 1. Setup Robot Arms
 
-Run the port scanner to automatically detect your SO-101 arms:
+Run the setup wizard to detect, identify, and calibrate your SO-101 arms:
 
 ```bash
-go run ./cmd/robot-info
+lerobot setup
 ```
 
 This will:
 
 - Scan all serial ports for Feetech servos
-- Wiggle each arm for identification
-- Prompt you to label leader and follower arms
+- Wiggle each arm for identification (select leader/follower)
+- Guide you through calibration (move joints to record min/max range)
 - Save configuration to `lerobot.json`
 
 ### 2. Start Teleoperation
 
 ```bash
-go run ./cmd/lerobot-teleoperate
+lerobot teleoperate
 ```
 
 The terminal UI displays:
@@ -63,71 +62,53 @@ The terminal UI displays:
 
 Press `q` or `Ctrl+C` to stop.
 
-## Manual Configuration
+## Command Line Options
 
-If you prefer manual configuration, specify ports directly:
+### teleoperate
 
-```bash
-go run ./cmd/lerobot-teleoperate \
-  --teleop.port /dev/tty.usbserial-1234 \
-  --robot.port /dev/tty.usbserial-5678
-```
+| Flag       | Default | Description                                               |
+| ---------- | ------- | --------------------------------------------------------- |
+| `--hz`     | `60`    | Control loop frequency in Hz                              |
+| `--mirror` | `false` | Mirror mode: invert shoulder_pan and wrist_roll positions |
 
-### Command Line Options
-
-| Flag            | Default     | Description                                                 |
-| --------------- | ----------- | ----------------------------------------------------------- |
-| `--robot.port`  | from config | Follower arm serial port                                    |
-| `--robot.id`    | `follower`  | Robot identifier for calibration                            |
-| `--teleop.port` | from config | Leader arm serial port                                      |
-| `--teleop.id`   | `leader`    | Teleoperator identifier for calibration                     |
-| `--hz`          | `60`        | Control loop frequency in Hz                                |
-| `--mirror`      | `false`     | Mirror mode: invert shoulder_pan and wrist_roll positions   |
-
-## Calibration
-
-### Using LeRobot Calibration Files
-
-(todo: implement here)
-
-Copy your existing LeRobot calibration files:
+Example:
 
 ```bash
-mkdir -p calibration
-cp ~/.cache/huggingface/lerobot/calibration/robots/so101_follower/main_follower.json calibration/follower.json
-cp ~/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/main_leader.json calibration/leader.json
+lerobot teleoperate --hz 30 --mirror
 ```
 
-### Calibration File Format
+## Configuration
+
+Configuration is stored in `lerobot.json`:
 
 ```json
 {
-  "shoulder_pan": {
-    "id": 1,
-    "drive_mode": 0,
-    "homing_offset": 978,
-    "range_min": 823,
-    "range_max": 3540
+  "leader": {
+    "port": "/dev/cu.usbmodem1234",
+    "calibration": {
+      "shoulder_pan": { "id": 1, "range_min": 823, "range_max": 3540 },
+      "shoulder_lift": { "id": 2, "range_min": 1000, "range_max": 3000 },
+      ...
+    }
   },
-  "shoulder_lift": { ... },
-  "elbow_flex": { ... },
-  "wrist_flex": { ... },
-  "wrist_roll": { ... },
-  "gripper": { ... }
+  "follower": {
+    "port": "/dev/cu.usbmodem5678",
+    "calibration": { ... }
+  }
 }
 ```
+
+Run `lerobot setup` to regenerate this file.
 
 ## Architecture
 
 ```
 lerobot-go/
 ├── cmd/
-│   ├── lerobot-teleoperate/  # Main teleoperation TUI
-│   └── robot-info/           # Port scanner and configurator
+│   └── lerobot/           # CLI with setup and teleoperate commands
 ├── pkg/
-│   ├── robot/                # Arm control and calibration
-│   └── teleop/               # Teleoperation controller
-└── calibration/              # Calibration JSON files
+│   ├── robot/             # Arm control, calibration, and config
+│   └── teleop/            # Teleoperation controller
 ```
 
 ### Motor Configuration
@@ -143,7 +124,7 @@ lerobot-go/
 
 ## Dependencies
 
-- [feetech-servo](https://github.com/hipsterbrown/feetech-servo) - Feetech servo protocol
+Thanks to the awesome [feetech-servo](https://github.com/hipsterbrown/feetech-servo) package for the Feetech servo interface.
 
 ## Related Projects
 

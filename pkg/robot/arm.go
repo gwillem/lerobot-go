@@ -14,23 +14,11 @@ type Arm struct {
 	calibration Calibration
 }
 
-// ArmConfig holds configuration for creating an arm.
-type ArmConfig struct {
-	Port            string
-	CalibrationPath string
-}
-
 // NewArm creates and initializes an arm connection.
-func NewArm(cfg ArmConfig) (*Arm, error) {
-	// Load calibration
-	cal, err := LoadCalibration(cfg.CalibrationPath)
-	if err != nil {
-		return nil, fmt.Errorf("load calibration: %w", err)
-	}
-
+func NewArm(port string, cal Calibration) (*Arm, error) {
 	// Open serial bus
 	bus, err := feetech.NewBus(feetech.BusConfig{
-		Port:     cfg.Port,
+		Port:     port,
 		BaudRate: 1_000_000,
 		Protocol: feetech.ProtocolSTS,
 	})

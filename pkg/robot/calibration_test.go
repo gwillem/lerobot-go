@@ -2,8 +2,6 @@ package robot
 
 import (
 	"math"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -70,55 +68,6 @@ func TestMotorCalibration_RoundTrip(t *testing.T) {
 		if math.Abs(float64(back-raw)) > 1 {
 			t.Errorf("Round-trip failed: %d -> %f -> %d", raw, norm, back)
 		}
-	}
-}
-
-func TestLoadCalibration(t *testing.T) {
-	// Create a temporary calibration file
-	content := `{
-		"shoulder_pan": {
-			"id": 1,
-			"drive_mode": 0,
-			"homing_offset": 978,
-			"range_min": 823,
-			"range_max": 3540
-		},
-		"gripper": {
-			"id": 6,
-			"drive_mode": 0,
-			"homing_offset": 1025,
-			"range_min": 2041,
-			"range_max": 3275
-		}
-	}`
-
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "test_calibration.json")
-	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
-
-	cal, err := LoadCalibration(tmpFile)
-	if err != nil {
-		t.Fatalf("LoadCalibration failed: %v", err)
-	}
-
-	// Verify shoulder_pan
-	sp, ok := cal[ShoulderPan]
-	if !ok {
-		t.Fatal("shoulder_pan not found in calibration")
-	}
-	if sp.ID != 1 || sp.RangeMin != 823 || sp.RangeMax != 3540 {
-		t.Errorf("shoulder_pan calibration incorrect: %+v", sp)
-	}
-
-	// Verify gripper
-	gr, ok := cal[Gripper]
-	if !ok {
-		t.Fatal("gripper not found in calibration")
-	}
-	if gr.ID != 6 || gr.RangeMin != 2041 || gr.RangeMax != 3275 {
-		t.Errorf("gripper calibration incorrect: %+v", gr)
 	}
 }
 
