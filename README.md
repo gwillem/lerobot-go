@@ -2,6 +2,8 @@
 
 A high-performance Go implementation for teleoperating robot arms, compatible with [HuggingFace LeRobot](https://github.com/huggingface/lerobot). Control your SO-101 robot arm with real-time visualization and seamless hardware integration.
 
+![lerobot-go teleoperation](https://buq.eu/screenshots/2fc3bd789c7e80936bad65d3.png)
+
 ## Features
 
 - **Real-time Teleoperation** - Control follower arm by moving leader arm at 60Hz
@@ -73,13 +75,14 @@ go run ./cmd/lerobot-teleoperate \
 
 ### Command Line Options
 
-| Flag            | Default     | Description                             |
-| --------------- | ----------- | --------------------------------------- |
-| `--robot.port`  | from config | Follower arm serial port                |
-| `--robot.id`    | `follower`  | Robot identifier for calibration        |
-| `--teleop.port` | from config | Leader arm serial port                  |
-| `--teleop.id`   | `leader`    | Teleoperator identifier for calibration |
-| `--hz`          | `60`        | Control loop frequency in Hz            |
+| Flag            | Default     | Description                                                 |
+| --------------- | ----------- | ----------------------------------------------------------- |
+| `--robot.port`  | from config | Follower arm serial port                                    |
+| `--robot.id`    | `follower`  | Robot identifier for calibration                            |
+| `--teleop.port` | from config | Leader arm serial port                                      |
+| `--teleop.id`   | `leader`    | Teleoperator identifier for calibration                     |
+| `--hz`          | `60`        | Control loop frequency in Hz                                |
+| `--mirror`      | `false`     | Mirror mode: invert shoulder_pan and wrist_roll positions   |
 
 ## Calibration
 
